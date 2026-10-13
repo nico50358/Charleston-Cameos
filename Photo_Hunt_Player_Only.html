@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Photo Hunt</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--ink:#171717;--muted:#737373;--paper:#f5f3ee;--card:#fff;--line:#e6e1d8;--soft:#efede7;--accent:#171717;--good:#2f6b45}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--paper);color:var(--ink)}
+button,input,textarea{font:inherit}
+button{cursor:pointer}
+.app{min-height:100%;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:2000;background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.topbar-inner{max-width:1200px;margin:auto;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:38px;height:38px;border-radius:12px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:18px}
+.brand h1{font-size:17px;line-height:1;margin:0;font-weight:850;letter-spacing:-.03em}
+.brand small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.top-actions{display:flex;gap:7px;align-items:center}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 12px;border-radius:11px;font-weight:800;font-size:12px}
+.btn.dark{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.danger{color:#9b2f2f}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.mode-pill{font-size:11px;font-weight:900;padding:7px 9px;border-radius:999px;background:var(--soft)}
+body.player .mode-pill{background:#e8f1eb;color:var(--good)}
+body.player .editor-only{display:none!important}
+body.editor .player-only{display:none!important}
+
+.hero{max-width:1200px;width:100%;margin:auto;padding:20px 18px 12px}
+.hero-row{display:flex;align-items:end;justify-content:space-between;gap:16px}
+.hero h2{font-size:30px;line-height:1;margin:0;letter-spacing:-.045em}
+.hero p{margin:8px 0 0;color:var(--muted);font-size:13px}
+.progress-wrap{min-width:190px}
+.progress-label{display:flex;justify-content:space-between;font-size:11px;font-weight:800;margin-bottom:6px}
+.progress{height:7px;background:#dfdcd5;border-radius:99px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--ink);border-radius:99px;transition:width .4s}
+@media(max-width:650px){.hero-row{display:block}.progress-wrap{margin-top:16px}.topbar-inner{padding:11px 12px}.hero{padding:16px 12px 10px}.brand small{display:none}}
+
+.map-wrap{max-width:1200px;width:100%;margin:auto;padding:0 18px 14px}
+.map-shell{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line);box-shadow:0 10px 35px #0000000c;background:#ddd}
+#map{height:58vh;min-height:440px;width:100%}
+.map-tools{position:absolute;right:12px;top:12px;z-index:900;display:flex;gap:7px;flex-direction:column}
+.tool{border:1px solid #ddd;background:#fff;border-radius:11px;padding:9px 11px;box-shadow:0 3px 14px #0002;font-size:12px;font-weight:850}
+.editor-hint{position:absolute;left:12px;bottom:12px;z-index:900;background:#171717e9;color:#fff;border-radius:12px;padding:9px 11px;font-size:11px;display:none}
+body.editor .editor-hint{display:block}
+.leaflet-control-attribution{font-size:9px!important}
+.leaflet-popup-content-wrapper{border-radius:15px}
+.leaflet-popup-content{margin:13px 15px}
+.popup-name{font-weight:900;margin-bottom:4px}
+.popup-sub{font-size:11px;color:#777;margin-bottom:9px}
+.popup-btn{border:0;background:#171717;color:#fff;border-radius:9px;padding:8px 10px;font-size:11px;font-weight:850;width:100%}
+
+.content{max-width:1200px;width:100%;margin:auto;padding:0 18px 28px}
+.selected{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 8px 30px #00000008}
+.photo-area{position:relative;min-height:300px;background:#ddd;overflow:hidden}
+.photo-area img{width:100%;height:100%;min-height:300px;object-fit:cover;display:block;filter:grayscale(1);transition:filter .9s ease,transform .9s ease}
+.photo-area.unlocked img{filter:none}
+.lock-cover{position:absolute;inset:0;display:grid;place-items:center;background:#0003;backdrop-filter:blur(2px)}
+.lock-cover span{background:#171717ed;color:#fff;border-radius:999px;padding:10px 15px;font-size:13px;font-weight:900}
+.details{padding:25px}
+.kicker{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:#8a877f}
+.details h3{font-size:25px;line-height:1.05;letter-spacing:-.04em;margin:7px 0 7px}
+.details p{color:#626262;line-height:1.55;font-size:14px;margin:0 0 17px}
+.status{font-size:12px;color:#777;min-height:18px;margin-top:8px}
+.full{width:100%}
+@media(max-width:780px){.selected{grid-template-columns:1fr}.photo-area{min-height:230px}.photo-area img{min-height:230px}.details{padding:18px}}
+
+.editor-panel{max-width:1200px;width:100%;margin:0 auto;padding:0 18px 28px}
+.editor-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 8px 30px #00000008}
+.editor-head{display:flex;justify-content:space-between;gap:12px;align-items:start;margin-bottom:16px}
+.editor-head h3{margin:0;font-size:20px;letter-spacing:-.03em}
+.editor-head p{margin:5px 0 0;color:var(--muted);font-size:12px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:1/-1}
+.field label{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#777}
+.field input,.field textarea{width:100%;border:1px solid #dcd8d0;background:#fbfaf7;border-radius:11px;padding:11px;outline:none}
+.field input:focus,.field textarea:focus{border-color:#888}
+.field textarea{min-height:95px;resize:vertical}
+.photo-input{display:flex;gap:8px;align-items:center}.photo-input input{min-width:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.note{font-size:11px;color:#85817a;line-height:1.45;margin-top:10px}
+@media(max-width:600px){.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.editor-card{padding:15px}.top-actions .mode-pill{display:none}}
+
+.location-list{max-width:1200px;width:100%;margin:auto;padding:0 18px 36px}
+.location-list h3{font-size:16px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.loc-btn{border:1px solid var(--line);background:#fff;border-radius:13px;padding:11px;text-align:left}
+.loc-btn strong{display:block;font-size:12px}
+.loc-btn span{display:block;font-size:10px;color:#85817a;margin-top:4px}
+.loc-btn.done{border-color:#bbb;background:#fafafa}
+
+.empty{padding:35px;text-align:center;color:#777}
+
+.marker{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:3px solid #fff;box-shadow:0 3px 14px #0004;font-size:14px;font-weight:900}
+.marker.locked{background:#171717;color:#fff}.marker.done{background:#fff;color:#171717}
+</style>
+</head>
+<body class="player">
+<div class="app">
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><div class="logo">📸</div><div><h1>Photo Hunt</h1><small id="subtitle">Explore in any order</small></div></div>
+    <div class="top-actions">
+      <span class="mode-pill" id="modePill">PLAY MODE</span>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-row">
+    <div><h2 id="heroTitle">Find the photos.</h2><p id="heroText">Visit locations in any order and get close enough to unlock their photos.</p></div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span id="progressText">0 / 24 unlocked</span><span id="percent">0%</span></div>
+      <div class="progress"><i id="progressBar"></i></div>
+    </div>
+  </div>
+</section>
+
+<section class="map-wrap">
+  <div class="map-shell">
+    <div id="map"></div>
+    <div class="map-tools">
+      <button class="tool" id="fitBtn">⌖ Show all</button>
+      <button class="tool player-only" id="myLocBtn">◎ My location</button>
+    </div>
+    <div class="editor-hint">EDIT MODE · Click a pin to edit it · Click the map to add a location</div>
+  </div>
+</section>
+
+<section class="content">
+  <div class="selected">
+    <div class="photo-area" id="photoArea">
+      <img id="mainPhoto" alt="">
+      <div class="lock-cover" id="lockCover"><span>🔒 Photo locked</span></div>
+    </div>
+    <div class="details">
+      <div class="kicker" id="selectedKicker">SELECTED LOCATION</div>
+      <h3 id="selectedName">Select a location</h3>
+      <p id="selectedClue">Choose a marker on the map.</p>
+      <button class="btn dark full player-only" id="unlockBtn" disabled>Unlock photo</button>
+      <button class="btn dark full editor-only" id="editHereBtn">Edit this location</button>
+      <div class="status" id="mainStatus"></div>
+    </div>
+  </div>
+</section>
+
+<section class="editor-panel editor-only">
+  <div class="editor-card">
+    <div class="editor-head">
+      <div><h3 id="editorTitle">Edit location</h3><p>Changes are saved in this browser. GPS is never requested in organizer mode.</p></div>
+      <button class="btn danger" id="deleteBtn">Delete</button>
+    </div>
+    <div class="formgrid">
+      <div class="field full"><label>Name</label><input id="fName"></div>
+      <div class="field"><label>Latitude</label><input id="fLat" type="number" step="any"></div>
+      <div class="field"><label>Longitude</label><input id="fLng" type="number" step="any"></div>
+      <div class="field"><label>Unlock radius (metres)</label><input id="fRadius" type="number" min="1"></div>
+      <div class="field"><label>Photo URL</label><input id="fPhoto" type="url" placeholder="https://..."></div>
+      <div class="field full"><label>Or choose a photo from your computer</label><input id="fFile" type="file" accept="image/*"></div>
+      <div class="field full"><label>Clue / description</label><textarea id="fClue"></textarea></div>
+    </div>
+    <div class="actions">
+      <button class="btn dark" id="saveBtn">Save changes</button>
+      <button class="btn" id="newBtn">＋ Add location</button>
+      <button class="btn" id="exportBtn">Export hunt</button>
+      <button class="btn" id="importBtn">Import hunt</button>
+      <input id="importFile" type="file" accept=".json" hidden>
+      <button class="btn" id="resetBtn">Reset to original map</button>
+    </div>
+    <div class="note" id="editorStatus">Your edits are stored locally in this browser. Export the hunt when you want a backup.</div>
+  </div>
+</section>
+
+<section class="location-list">
+  <h3>All locations</h3>
+  <div class="grid" id="locationGrid"></div>
+</section>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const ORIGINAL_LOCATIONS = [
+  {
+    "id": "loc-1",
+    "name": "Madison Maison",
+    "lat": 32.785884,
+    "lng": -79.935519,
+    "radius": 60,
+    "clue": "Madison Maison--a cameo of one of Charleston's hottest nightclubs.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR4LxbTzD1cchMi8dnRAlOWMO5Kh3MlppB9ShVe0svjR4lHNrWdHvG3h4MQiFQE1KmgxfwL8qGGTAOsoeeTWS-Y9t5aicbfUMQHKxMN__l2qBWV7I9vFtWj_BWn212nRBxKDiliGRFdfnYzOY4rRcfrIbqvqn0oUwKEysiW0ocfupTSu3ZvaJkAW2J6HtUUNTE85CMCb6mDgaZjKobPmLUBn9xDiKuCmCHF27p7j9nwTfmw3vPURrDLdi8s?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-2",
+    "name": "Juanita Greenbergs",
+    "lat": 32.7883432,
+    "lng": -79.9382,
+    "radius": 60,
+    "clue": "A favorite for over 25 years back when it was a hole in the wall off Wentworth. The black bean burrito is still my fave and they aren't kidding about keeping it in the wrapper.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR5-xu_AretHLL1hEjIt-6ADkYg1_Y2M_fuAkiEl8CfS8hxqZI7LBu_P2C0viDTcgDBzXwwAgqva4NjEC1I77CVGIgTyJvZfCco7xtQi2GAYq69G3Xp9JAnSihqr4XIpTitQbxR6JVFGVdjVcjiWDyJjFEnwhX9_dKpVYA_qtvqACwExLv5at7n5PZRjgoZlNCD_aG7t-cr9sZ_hBFf6iYQPi4gy_a5tbraUR8sErscVm0YGT2jC1UJ--wY?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-3",
+    "name": "Blue Window",
+    "lat": 32.7878987,
+    "lng": -79.9383119,
+    "radius": 60,
+    "clue": "Visible at night, this window shines with blue interior light quite different from the other windows in the building.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6Ru3fjjj0v9hW-3qxgKGR_Fhnlr1ClY1tXiOXwGncKMutItGSyBtcRSrhyKptkSepltjPrgCAOzq2VSXGBMZ1qQZxLhTT6tF7Fg2zDel4DchulGJF-34Z3MRSyVWBGcFMSOkuGkuDaZjB5nT3THppzkxbRSuiL8gwAJedhg1fdKHOvxMdH5NJfrMIQ1fBer2fHUXW9h9lwN1xgl4NgDFBJUDucyK3tGwNuv95nXlcT6yZdfiGdHclvnDM?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-4",
+    "name": "South St. Cheesesteaks Short Order Chef",
+    "lat": 32.7898977,
+    "lng": -79.9475181,
+    "radius": 60,
+    "clue": "Compelling energy in this tiny joint that serves \"seriously good\" cheesesteaks.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR4iMkAFhvvHWZE6sIZvqGMTtSnGS6Wq-gn6Tl89H9Atotqkm9TaoENC9wkvcHf910qiDBIIhOueGT8eh0cUXP4BoVE_L8duVzm2K8yQAXJ2xuyQNFI7NJDqrfxcXpoBVf4EIzT5aGPZjbGvAdnW7oTdpA3_6RxX3CVex6l8POgGoBzm2wrGMHI6sV5YAB6609qxCz3yyVDoUZ90qB_S2KBC-eBRIuAEVaWKASxXVSZRLiROsvR33hVM254?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-5",
+    "name": "Reid Street Cinderella Story",
+    "lat": 32.7932965,
+    "lng": -79.9363334,
+    "radius": 60,
+    "clue": "A fuzzy monster foot slipper-- spilled from a bag of discarded shoes outside college housing on a Charleston street. Fleeting, misplaced, and quietly transformed through attention-- what was once part of a passing life, lingers here, holding traces of presence, humor, and impermanence.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR7E3kFHqHSD23HK1kPI8TNZiTA9x6RZw6YyfoAQutPYLhMty_As7MJW2_MzwcdniXd5SdLO-f-j6eHuGZcpHrCHbnuSq9T0mtIf1R85oAYG5sD0u6H5t6amYzOOjziimqra2_WFVY6IhmXuqEPWjBadqkJ94lzAc_GZP9kGi8-DgejBL6fNjHaPHPjYyVdiVVPXSE5fKReCWeqO--Q2QQyG_849tW52eXmW-QBfnsrjq474DMfyd4WWJOo?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-6",
+    "name": "Matcha Mario",
+    "lat": 32.7916248,
+    "lng": -79.9412686,
+    "radius": 60,
+    "clue": "Matcha Mario (@matchamanjosh) was visiting from Chicago when I encountered him outside Babas. Loved his joyful vibes and was tempted to take up his offer for a ride.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR7AuMDIlztYg644GjM02Xeze55sxG5IEa29brGQzWttukzJm3LZITrr6mIrMf8poRYOfaI2KVKzeO1x1160wSrH-LDhMW7sYbl92IJ1ZO5z9I-qAMo-AZEs5ZWshW0ppi3pWxDvF4xkdlF9XDsvl2v1IKtTyP9HEXtceuY6JHCbYIzbfJdxv9E-v_ZR2pG8SmhsZ4a9RoYhNuHGFQQQK9ry0053zSTMp5bT47OsApq7cxEYPWQxHcnqr2w?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-7",
+    "name": "The Market",
+    "lat": 32.7808444,
+    "lng": -79.93055,
+    "radius": 60,
+    "clue": "Glimpsed this angle crossing the street and was reminded how strongly location affects perspective.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR7unuEblXDNVwyP_BIoAOmdDo6IQ1DAXyr1MR4wqeyvustOCFKjYnqLeV6VQ8SNCwzDxJZsvQdU5avXl2QhTT2Tpl3M4qcVSxfqrBJA0_j_rjoSAApYaB07yEhC3T5HjxqjrAWOcBzxA_pyeMyOfz9EouO5nPymyQd1DysN8HnDM76eCGoj0oYXrV2ZHSxYllnukCr26lPz7koJ-43XKNpco_iX9UsNmW1eKynUwsFTA8NrLPohpznLtew?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-8",
+    "name": "A Boxer",
+    "lat": 32.791782,
+    "lng": -79.9548004,
+    "radius": 60,
+    "clue": "The perfect tension of coiled and ready strength with the precision of timing--the power of gesture.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6TerEAxLtm3YuU5h006NtlmgBmFJTvksGwXNNUFlQ6L6Kllx7C_Hb23UGUwNQ9XuShzVKtEGvXpuTFvyUbJqVwBjJ0Wtj60c_14UNgK0C94T0jKJ_4XEHVql_qm6F3dzm13a8hn81u6cDuzswkmTJwqNFqPAUIIPwQlPHYABn72pjcm5aFSCGksZHHhBn2xJ4K4CgHwjAQKTKsBePTR-CLz5jv1noQ_-YJrfseO39vbn82gJ3n5WE9RSc?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-9",
+    "name": "Republic Ice Cream",
+    "lat": 32.7881465,
+    "lng": -79.9380759,
+    "radius": 60,
+    "clue": "Sometimes, when the energy on King Street is really pulsing in the humidity, ice cream tilts the balance solidly back to childhood sensory associations and it can feel despite so many changes, that Charleston is still the city I remember surveying with orange sherbet sticky fingers...",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6hph4NpSkyZ3j9Pny1RERH0N1xDllGVq9WNwTW4fJa1mCnxYH8zKGuYI1qVk0114aRE14CMrCGaKOO7utIGaIX5M4CJP67wOykHBZdWpMOUwnoIU9Fxja66PHFKCc9V495CEa1anyz6E_KCHa677QipmfVX-Lq6rHolMTb8_y6uHsCYa4JKBDVEyJ-3x-_iGlSw7r6voNdkh-BUhG05kqcY1lPsiGJq94OZ2BaoIxqcp4YUlP1R1VwSgI?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-10",
+    "name": "Drake Street Garden",
+    "lat": 32.7937393,
+    "lng": -79.9331934,
+    "radius": 60,
+    "clue": "Charleston gardens are the perfect secret oasis where locals linger over drinks under shady trees-- when the mosquitoes aren't out.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6gc7RukTK9puT06E8h7XuOVtGCy3VCQ-4RoU-Rm9sPgU-ZVHRr6XMPpExJaNicKIEQMUKCghuTA0NL8zYFlVYm4okWUg0NgS2ct6Chf_FyKgLg9VUX6hMGi3ELOcNgLuY9E7K6l_WAO1_gxmiZH-BiOCuD9bXFuig73waFQZImrdteh6lnN4O4jx8SfGF03eZOdPbXPoxOtidZSZhqzTW7ulgNFyyCCgLnmO-Kj3ooLQWwPqQAVziV4dE?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-11",
+    "name": "The Old Museum",
+    "lat": 32.7840317,
+    "lng": -79.9446458,
+    "radius": 60,
+    "clue": "Humid, dappled light settles across the old museum grounds, where architecture softens into memory and shadow--layered atmosphere and fleeting presence.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR5L0LcPD2mKDsj-aCU92ifIM8Gps-mfr33F-yzfwuP4SllTqNUN3fsl5qjCul6UhZJs1bs5dFm8ToDS6jlqxXNfhhFA3aBUhffHX85OInQ_Z74bH3MnxGzyONDe1pHudvkd_IEDnZnA4nfYi-6EcGNxUyKe0t5OWqSWGpofip9u5QanmHH1J53txwMlEMDyvjM6P-mO2I__IL4IHZHvI70Qy7x63SVrKJ-z00KOqLcyiZMLxVg9NEvviis?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-12",
+    "name": "The Young Dancers",
+    "lat": 32.7786918,
+    "lng": -79.9286097,
+    "radius": 60,
+    "clue": "Light and gesture moving in supported harmony.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR5lI690niPa0K3RqbGhSTCOxlfbQ6P7dDhlReZtqmYYyHCJ9FSgnU_XflfxC8nTESNQQcBkdCWae3rOLk5wld5ctJcG8VZHEFTGIhN0jKjJWsaR9krWCV6k6CKc5XGDrUZ93m5JrSXVkY3T4JXTcXm1k9t85Xtmdmr0_h4AbmWfhi04C5k6UFnuBiCQVkRpf8Er9oz3kdkYlx7CW32HpPIZkPfgf4qG-ob4st_IFcr0CFfql83o5j91Z_A?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-13",
+    "name": "The Pirate House",
+    "lat": 32.7785893,
+    "lng": -79.9295677,
+    "radius": 60,
+    "clue": "The weight of history, humidity, and an anchor.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6vECLu2W6P9daWHCifGziZbwHdm7zZUDWCyzMBqKl2OVjjT68soaMzPzFnfC41h4DZq8z34CcKRUesA3nbJR0qHyjf8PCJLTby2m1v_L_LGIRfyziYYJ2k-zM_ub6aXfZ4uPUYezIU89f2lzROYUcVJ8Ct3oeOpW9IgDbxeoKPZ4CvRgt6a1L15ETfdlMdnOOg0HiTc1P7Bh3B2hYsEdQRLwNQtTt18GKS-mFyoBJuM8g5eqj5o8fViI4?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-14",
+    "name": "Unity Alley",
+    "lat": 32.777982,
+    "lng": -79.9278608,
+    "radius": 60,
+    "clue": "Unity Alley where many stories merge.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR41BgjXwtrXLABaWFipds0_rcJ9ieGPCxQz1JwlcBvVABTOGMJZOvTxyqcgBey7tBcHXKFb5a7Ljfq4LB-cuVxbUo5q72mXfEdi7A0kSHAr5gnZVyJ03lzZvnyMD7zmdQZtBtaiHBN4LWQwfFYvzkD89XysscgBQsBpHdAtG2Icu6OGiCCalffevvIvVQb4Od7Bxt5gbZFXEEr3pqPZAklttQLp80qeCsMjs_ECoHZbEkiIz0y2B1Dnzkg?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-15",
+    "name": "Last Saint",
+    "lat": 32.79521,
+    "lng": -79.9396029,
+    "radius": 60,
+    "clue": "Dim lights, cold drinks and music that wraps around you like the night with @deejaypauly spinning Spirit in the Sky.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6Wwwdjl6cNFybu_V76fjitVhbFqUwhPgUtNng5x9cmKtW6VgF5sTmzLND4s9o03S1hroPbGIBBGal2VJrl_X3bmQVMQ5kN2seltJtsO4LAJ6hzEDKl0c5PGgtmD5dJZBlTrRItM0Ok72BFIaAHHPadenrYEC_Wx-3mYCwEgY4L1a0jjFKy0wfsEzlQ-__4SwmcrIveZjPA9xhFl2TomVg-7X47alZa9vWvchGYGWOi-CBvtS45dF3-XJs?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-16",
+    "name": "White Dress in the Foyer",
+    "lat": 32.775532,
+    "lng": -79.9306324,
+    "radius": 60,
+    "clue": "An artist at the Peninsula Magazine 2026 Spring Fashion Show quietly watching from the foyer.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR4ubMN5qT9dbUzp-AF_2bPyA4Kac6ltLKS9RPxX0Rgf7RSVnDgidZ5YbHSmkAREf8buVSzRS2Lm5PBAQxIifD0vQLu1QtmQHeP2KKUbQucV5IMCWw8WqDUs3YbYwKGWfo3Gpx46blWY-HZHe--wCR-B61hI8C5fv34trYgK1WGzTFYo2cPdet1bjoceVSbu-Wf532MinVthP5r7zD74m1Fob0qTvis3M1fFulSnogWkQed1p5G-xPacSO8?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-17",
+    "name": "Umbrella Fountain",
+    "lat": 32.778966,
+    "lng": -79.9255465,
+    "radius": 60,
+    "clue": "A visual poem about movement vs. permanence, joy in the spray against the solidity of history in a fountain where I played with my friends and where my children later left wet footprints on the stones-- marks that evaporate but never truly vanish.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR58HzLfbZSQl7VoPyMtGLJQUQnLKIrpveZ3qyoHGXmSGfvBMuL6qQeQFPfeR899e5GsuH_keSAP8tYCGaZsYnAEMSGwnP3QVSFMHs_r3WKFndHVmT-JvSjv0tA6FOHS1H2PoUEXq_mBemLvSHzIQ46R_Zauv3BfuTfyoxVon7IZev0gPZVxNW9kWRw8N42_04KaJ8mqa7HhOxtnGYiVeivPyzrS334TsrB0EvKMYO6cL1ALE4C2fqoOrf0?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-18",
+    "name": "Off King Street",
+    "lat": 32.7905999,
+    "lng": -79.9385772,
+    "radius": 60,
+    "clue": "Turning east off King Street into lush palmetto shadows with one of the city's many elaborate cornices....",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6HzP-_Hpq22ksExM7fWMopIGOFCe6MxxvX6UpJV_1nGeZCO_P8Q5GGcb8tGkX6eHmt8flNyUcXLpTZgzqXHNuVhzxFn9xZKzwCMPkpHau-4HUEklu5j1xwhwMuZR4nDR45elxAeLGD_-9yDOcQtE_USkiHGba1fMp9LnGocftqPmFObZ3UI-p0X5XnoJV0xnSzMJkYDnUQNNBs4bAYgiHsHSixqKZUaR6dPQJJF8LA91V_Rr5a3TW1Cgw?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-19",
+    "name": "Round and Round",
+    "lat": 32.7971008,
+    "lng": -79.9336843,
+    "radius": 60,
+    "clue": "A tribute to the cyclical nature of daily commutes, tourist traffic, and the rhythms of city life in a place where old streets meet modern needs.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6N4fu5PLZoO_89VeRyPJ3_E027tzdihSQYOuOUMQ8FJdKdshqNHM73It9MjnUemnaBcaOy-ocKQMVR4lOzt0EQTT47wqD6EItC6nt6zKYjL2nuyANoKXhgqbH2LA71fCBkwiD7GV-Wd8PdBN2yqzlCX7n986lB2Cog8lfD-7C1aDzNOdiPEnIla9ldvkmHD5d0bkLj-7_zxlG9o4jYS6tygJcBdbUUKxPihiTrfkQpQ_8cap3xOW84Nyw?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-20",
+    "name": "Sunset Serenade",
+    "lat": 32.7808593,
+    "lng": -79.9264549,
+    "radius": 60,
+    "clue": "The music spills across the back steps of the Customs House-- drawing all the listeners into a seasonal and timeless magic circle.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR4Zn8DeloME5m6WR3Htr3rca_bjh6m-H9W5UCAOX5uorUEeHz8IviE-CL-c6wi4TflSqg2GVZ1h8UdBezWPxGYEkFfX1vZjKIv6-_P4BBdwuRV8zzsZlgUi-T9B6-xfY8vfjkCNjF45TBPxgJsleVshp1Qs0CqOR1B4TsPMkXWK60AWglqO-tEn_8wT9qjIuXVpprXI8VSRlrZy7diWYKdhR5zCKo_wXZgeOOse1cmon5zrIr9NKFq1aNc?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-21",
+    "name": "Drake Street",
+    "lat": 32.7961533,
+    "lng": -79.9343686,
+    "radius": 60,
+    "clue": "If these walls could speak...",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6wwv4LGu2nVB9iOON77cS_onVjOdDuLaguyrixosh9u2w5i6u29MSdfdbXubRgVbtwRd6ght9Pfvg_UaauoG0uk497Csm_hj8IH4WuhlL71KufU1hrMKwysZ-Q_hhMvQ1tzdsY-P2RoBTuRg92kLLd_t7EGoXI5cuIhZKVBC3n0eVGqfu5Nyksf0xROAisN9QRFqSYLTkxWUpVZUoyfaC9DqIFzQseCvNDkU3QuP_0emxfnhEKUi_inEQ?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-22",
+    "name": "Pineapple Fountain",
+    "lat": 32.7780879,
+    "lng": -79.9251889,
+    "radius": 60,
+    "clue": "Splashing water--humid, salty air--a memory of summer shared by generations.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR6zL6rFaExSaeroOnrClcfTLwoHvX7Q0awC02sER6Y-bGBapOqcqkLcnZbHgyk9b_RiFUphpRprTUNrISIFdfimg9azr4MyqXGFsfYT2AcSkkpa1kpoB5Fd7U48yMCB9GXOHP0zo8K650WA4mJD3qUHlk_ROdNJ1_qHh4nyiQ8sAlchTQF0MiSRXtDycmKkHrFILVu8nFqSLDP9law0-Nmj_iZgq9GiMj3OYOdDy34WJ6I_spG6-WvPiKg?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-23",
+    "name": "Unitarian Graveyard",
+    "lat": 32.778562,
+    "lng": -79.934321,
+    "radius": 60,
+    "clue": "Tree and stone merging in the natural and sacred transformations of time...",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR4fCTWi9YperV_9M--W5wlAU1gDKw0tJzODVJqGPoQ_vbPFd78OLkvUA-wUADj66IvUHqH6fjDH72gtY60d2-bnYO6b6Vg-0lKVFTjJfJnNK2aE1Box36ISnJI1W1Zy3qGxnng1yIZvQTuxwXY0kbHKqb-1splEtLdHZ8wCB2UB6Qe9FndoC-StaCTRhEftOwDpTmPlMFjrHuxCYTfQg0woLvAYk2KIwpDErJLOs4fuUVgDDdP4xcSaYbQ?authuser=0&fife=s16383"
+  },
+  {
+    "id": "loc-24",
+    "name": "Mother Emanuel AME",
+    "lat": 32.7875111,
+    "lng": -79.9330868,
+    "radius": 60,
+    "clue": "A beacon of Love that hate cannot extinguish.",
+    "image": "https://mymaps.usercontent.google.com/hostedimage/m/*/3AAjQbR5BiPBQejXegYkoyUoCR03lFsISQ50uTvDEjYp1AhYOyobm7mFmwL1dJD7m8dE45SWT8U-sP6oxI183jJ_5LwfJqw-lVxDSuYMHKT-9nLM8MQyTYaNjG2XRa489ZnjumSsjG-04WdpdivHHSrRt3hcN39YMfGn2DcBZxvWuOrNHT4-9Jqtsug-EvYjKmPfpdNc87zBmnOHOhkZoz7oSQT6GiLsDKHDUV_221KnP33JCimB7f0_CdCOxd3k?authuser=0&fife=s16383"
+  }
+];
+const DATA_KEY = "photo-hunt-polished-data-v1";
+const PROGRESS_KEY = "photo-hunt-polished-progress-v1";
+const params = new URLSearchParams(location.search);
+let mode = "player";
+document.body.className = mode;
+
+let locations = loadData();
+let unlocked = new Set(JSON.parse(localStorage.getItem(PROGRESS_KEY)||"[]"));
+let selected = null, user = null, userMarker = null, accuracyCircle = null;
+const markers = new Map();
+
+const map = L.map("map",{preferCanvas:true,zoomControl:true});
+L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{
+  maxZoom:20,subdomains:"abcd",
+  attribution:'&copy; OpenStreetMap contributors &copy; CARTO'
+}).addTo(map);
+
+function loadData(){
+  try{
+    const s=localStorage.getItem(DATA_KEY);
+    if(s){const x=JSON.parse(s);if(Array.isArray(x)&&x.length)return x}
+  }catch(e){}
+  return structuredClone(ORIGINAL_LOCATIONS);
+}
+function saveData(){localStorage.setItem(DATA_KEY,JSON.stringify(locations))}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function markerIcon(done){
+  return L.divIcon({className:"",iconSize:[34,34],iconAnchor:[17,17],
+    html:`<div class="marker ${done?"done":"locked"}">${done?"✓":"🔒"}</div>`});
+}
+function refreshMarkers(){
+  markers.forEach(m=>m.remove()); markers.clear();
+  locations.forEach(loc=>{
+    const m=L.marker([loc.lat,loc.lng],{icon:markerIcon(unlocked.has(loc.id))}).addTo(map);
+    m.bindPopup(`<div class="popup-name">${esc(loc.name)}</div><div class="popup-sub">${unlocked.has(loc.id)?"🔓 Unlocked":"🔒 Locked"}</div>`);
+    m.on("click",()=>selectLocation(loc.id));
+    markers.set(loc.id,m);
+  });
+  const b=L.latLngBounds(locations.map(x=>[x.lat,x.lng]));
+  if(b.isValid()) map.fitBounds(b,{padding:[35,35],maxZoom:16});
+}
+function renderGrid(){
+  const grid=document.getElementById("locationGrid");
+  if(!locations.length){grid.innerHTML='<div class="empty">No locations yet.</div>';return}
+  grid.innerHTML=locations.map(x=>`<button class="loc-btn ${unlocked.has(x.id)?"done":""}" data-id="${esc(x.id)}"><strong>${esc(x.name)}</strong><span>${unlocked.has(x.id)?"🔓 Unlocked":"🔒 Locked"} · ${x.radius}m</span></button>`).join("");
+  grid.querySelectorAll(".loc-btn").forEach(b=>b.onclick=()=>selectLocation(b.dataset.id));
+}
+function updateProgress(){
+  const total=locations.length, done=locations.filter(x=>unlocked.has(x.id)).length, pct=total?Math.round(done/total*100):0;
+  document.getElementById("progressText").textContent=`${done} / ${total} unlocked`;
+  document.getElementById("percent").textContent=`${pct}%`;
+  document.getElementById("progressBar").style.width=pct+"%";
+}
+function selectLocation(id){
+  selected=locations.find(x=>x.id===id);
+  if(!selected)return;
+  document.getElementById("selectedName").textContent=selected.name;
+  document.getElementById("selectedClue").textContent=selected.clue||"";
+  document.getElementById("mainPhoto").src=selected.image||"";
+  document.getElementById("mainPhoto").style.display=selected.image?"block":"none";
+  const done=unlocked.has(id);
+  document.getElementById("photoArea").classList.toggle("unlocked",done);
+  document.getElementById("lockCover").style.display=done?"none":"grid";
+  document.getElementById("selectedKicker").textContent=mode==="editor"?"EDITING LOCATION":"LOCATION";
+  map.panTo([selected.lat,selected.lng],{animate:true});
+  if(mode==="editor")fillForm();
+  updateUnlock();
+}
+function fillForm(){
+  if(!selected)return;
+  document.getElementById("editorTitle").textContent="Edit: "+selected.name;
+  document.getElementById("fName").value=selected.name||"";
+  document.getElementById("fLat").value=selected.lat;
+  document.getElementById("fLng").value=selected.lng;
+  document.getElementById("fRadius").value=selected.radius||60;
+  document.getElementById("fPhoto").value=(selected.image||"").startsWith("data:")?"":(selected.image||"");
+  document.getElementById("fClue").value=selected.clue||"";
+}
+function updateUnlock(){
+  const btn=document.getElementById("unlockBtn");
+  if(mode!=="player"||!selected)return;
+  if(unlocked.has(selected.id)){btn.disabled=true;btn.textContent="✓ Photo unlocked";document.getElementById("mainStatus").textContent="This memory is yours to keep.";return}
+  btn.textContent="Waiting for arrival…";
+  if(!user){btn.disabled=true;document.getElementById("mainStatus").textContent="Allow location access to discover nearby photos.";return}
+  const d=distance(user.lat,user.lng,selected.lat,selected.lng);
+  if(d<=selected.radius){
+    // Arrival unlocks the photo automatically; the player doesn't need to tap a button.
+    unlocked.add(selected.id);
+    localStorage.setItem(PROGRESS_KEY,JSON.stringify([...unlocked]));
+    document.getElementById("mainStatus").textContent="✨ You found it! Photo unlocked.";
+    document.getElementById("unlockBtn").textContent="✓ Photo unlocked";
+    selectLocation(selected.id);
+    refreshMarkers();renderGrid();updateProgress();
+  } else {
+    btn.disabled=true;
+    document.getElementById("mainStatus").textContent=`${Math.round(d)} metres away — get within ${selected.radius} metres.`;
+  }
+}
+function distance(a,b,c,d){
+  const R=6371000,p=Math.PI/180,dl=(c-a)*p,dn=(d-b)*p;
+  const q=Math.sin(dl/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dn/2)**2;
+  return 2*R*Math.asin(Math.sqrt(q));
+}
+function onPosition(pos){
+  user={lat:pos.coords.latitude,lng:pos.coords.longitude};
+  if(!userMarker)userMarker=L.circleMarker([user.lat,user.lng],{radius:8,weight:3}).addTo(map);
+  else userMarker.setLatLng([user.lat,user.lng]);
+  if(!accuracyCircle)accuracyCircle=L.circle([user.lat,user.lng],{radius:pos.coords.accuracy||30,weight:1,fillOpacity:.07}).addTo(map);
+  else accuracyCircle.setLatLng([user.lat,user.lng]).setRadius(pos.coords.accuracy||30);
+  if(mode==="player"){
+    const newlyFound=[];
+    locations.forEach(loc=>{
+      if(!unlocked.has(loc.id) && distance(user.lat,user.lng,loc.lat,loc.lng)<=loc.radius){
+        unlocked.add(loc.id);newlyFound.push(loc);
+      }
+    });
+    if(newlyFound.length){
+      localStorage.setItem(PROGRESS_KEY,JSON.stringify([...unlocked]));
+      refreshMarkers();renderGrid();updateProgress();
+      if(selected && newlyFound.some(loc=>loc.id===selected.id)) selectLocation(selected.id);
+      else if(newlyFound.length===1){
+        selectLocation(newlyFound[0].id);
+        document.getElementById("mainStatus").textContent="✨ You found it! Photo unlocked.";
+      }
+    }
+  }
+  updateUnlock();
+}
+function startGPS(){
+  if(mode!=="player"||!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(onPosition,()=>{document.getElementById("mainStatus").textContent="Location permission is unavailable."},{
+    enableHighAccuracy:true,maximumAge:3000,timeout:10000
+  });
+}
+function setMode(next){
+  mode=next;
+  document.body.className=mode;
+  const u=new URL(location.href);u.searchParams.set("mode",mode);history.replaceState({}, "", u);
+    document.getElementById("modePill").textContent=mode==="editor"?"EDIT MODE":"PLAY MODE";
+  document.getElementById("subtitle").textContent=mode==="editor"?"Organizer mode — GPS is OFF":"Explore in any order";
+  document.getElementById("heroTitle").textContent=mode==="editor"?"Build your hunt.":"Find the photos.";
+  document.getElementById("heroText").textContent=mode==="editor"?"Click a pin to edit it, or click the map to add a new location.":"Visit locations in any order and get close enough to unlock their photos.";
+  if(mode==="editor"){user=null;if(userMarker){userMarker.remove();userMarker=null}if(accuracyCircle){accuracyCircle.remove();accuracyCircle=null}}
+  refreshMarkers();renderGrid();
+  if(selected)selectLocation(selected.id);
+  if(mode==="player")startGPS();
+}
+// Player-only build: mode switching is intentionally disabled.
+document.getElementById("fitBtn").onclick=()=>{
+  const b=L.latLngBounds(locations.map(x=>[x.lat,x.lng]));if(b.isValid())map.fitBounds(b,{padding:[35,35],maxZoom:16});
+};
+document.getElementById("myLocBtn").onclick=()=>{if(user)map.setView([user.lat,user.lng],17)};
+document.getElementById("editHereBtn").onclick=()=>document.getElementById("fName").focus();
+document.getElementById("unlockBtn").onclick=()=>{
+  if(!selected||!user)return;
+  if(distance(user.lat,user.lng,selected.lat,selected.lng)<=selected.radius){
+    unlocked.add(selected.id);localStorage.setItem(PROGRESS_KEY,JSON.stringify([...unlocked]));
+    selectLocation(selected.id);refreshMarkers();renderGrid();updateProgress();
+  }
+};
+document.getElementById("saveBtn").onclick=()=>{
+  if(!selected)return;
+  selected.name=document.getElementById("fName").value.trim()||"Untitled location";
+  selected.lat=Number(document.getElementById("fLat").value)||selected.lat;
+  selected.lng=Number(document.getElementById("fLng").value)||selected.lng;
+  selected.radius=Math.max(1,Number(document.getElementById("fRadius").value)||60);
+  selected.clue=document.getElementById("fClue").value.trim();
+  const url=document.getElementById("fPhoto").value.trim();
+  if(url)selected.image=url;
+  saveData();refreshMarkers();renderGrid();selectLocation(selected.id);
+  document.getElementById("editorStatus").textContent="✓ Saved locally.";
+};
+document.getElementById("fFile").onchange=e=>{
+  const file=e.target.files[0];if(!file||!selected)return;
+  const reader=new FileReader();
+  reader.onload=()=>{selected.image=reader.result;document.getElementById("fPhoto").value="";document.getElementById("mainPhoto").src=reader.result;saveData();document.getElementById("editorStatus").textContent="Photo loaded. Click Save changes to keep it."};
+  reader.readAsDataURL(file);
+};
+document.getElementById("newBtn").onclick=()=>{
+  const c=map.getCenter(),id="custom-"+Date.now();
+  locations.push({id,name:"New location",lat:c.lat,lng:c.lng,radius:60,clue:"Add a clue.",image:""});
+  saveData();refreshMarkers();renderGrid();selectLocation(id);
+};
+document.getElementById("deleteBtn").onclick=()=>{
+  if(!selected||!confirm(`Delete "${selected.name}"?`))return;
+  locations=locations.filter(x=>x.id!==selected.id);unlocked.delete(selected.id);
+  localStorage.setItem(PROGRESS_KEY,JSON.stringify([...unlocked]));saveData();refreshMarkers();renderGrid();updateProgress();
+  if(locations[0])selectLocation(locations[0].id);
+};
+document.getElementById("exportBtn").onclick=()=>{
+  const blob=new Blob([JSON.stringify(locations,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="photo-hunt-locations.json";a.click();URL.revokeObjectURL(a.href);
+};
+document.getElementById("importBtn").onclick=()=>document.getElementById("importFile").click();
+document.getElementById("importFile").onchange=e=>{
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();r.onload=()=>{
+    try{const x=JSON.parse(r.result);if(!Array.isArray(x))throw Error();locations=x;saveData();refreshMarkers();renderGrid();updateProgress();selectLocation(locations[0].id);document.getElementById("editorStatus").textContent="✓ Hunt imported."}
+    catch(err){alert("That file is not a valid hunt JSON.")}
+  };r.readAsText(file);
+};
+document.getElementById("resetBtn").onclick=()=>{
+  if(!confirm("Reset all edits to the original imported map?"))return;
+  localStorage.removeItem(DATA_KEY);locations=structuredClone(ORIGINAL_LOCATIONS);saveData();refreshMarkers();renderGrid();updateProgress();selectLocation(locations[0].id);
+};
+
+// In organizer mode, clicking the map creates a new location.
+map.on("click",e=>{
+  if(mode!=="editor")return;
+  const id="custom-"+Date.now();
+  locations.push({id,name:"New location",lat:e.latlng.lat,lng:e.latlng.lng,radius:60,clue:"Add a clue.",image:""});
+  saveData();refreshMarkers();renderGrid();selectLocation(id);
+});
+
+// Initial state.
+document.getElementById("modePill").textContent="PLAY MODE";
+document.getElementById("subtitle").textContent=mode==="editor"?"Organizer mode — GPS is OFF":"Explore in any order";
+refreshMarkers();renderGrid();updateProgress();
+if(locations.length)selectLocation(locations[0].id);
+if(mode==="player")startGPS();
+</script>
+</body>
+</html>
